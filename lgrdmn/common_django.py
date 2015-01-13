@@ -243,10 +243,7 @@ try:
 except:
     django_import = django.utils.module_loading.import_by_path
 
-try:
-    JsonEncoder = django_import(settings.JSON_ENCODER)
-except ImportError:
-    JsonEncoder = DjangoJSONEncoder
+JsonEncoder = django_import(settings.JSON_ENCODER) if hasattr(settings, "JSON_ENCODER") else DjangoJSONEncoder
 
 def json_params(request):
     """ Gets and validates parameters for json_response by inspecting request. """
