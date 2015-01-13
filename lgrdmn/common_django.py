@@ -239,7 +239,12 @@ class LazySave(object):
             self.value.save()
 
 try:
-    JsonEncoder = django.utils.module_loading.import_string(settings.JSON_ENCODER)
+    django_import = django.utils.module_loading.import_string
+except:
+    django_import = django.utils.module_loading.import_by_path
+
+try:
+    JsonEncoder = django_import(settings.JSON_ENCODER)
 except ImportError:
     JsonEncoder = DjangoJSONEncoder
 
