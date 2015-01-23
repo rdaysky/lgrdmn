@@ -1,9 +1,11 @@
 # File encoding: UTF-8
 
-import re
 import inspect
-import six
+import itertools
 import json
+import re
+import six
+import types
 
 def namespace(function):
     fields = function()
