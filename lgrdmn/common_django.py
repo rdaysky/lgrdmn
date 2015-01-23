@@ -6,6 +6,7 @@ from django.contrib                import auth
 from django.core.exceptions        import ObjectDoesNotExist, ImproperlyConfigured, MiddlewareNotUsed
 from django.core.serializers.json  import DjangoJSONEncoder
 from django.core.urlresolvers      import reverse as django_reverse
+from django.db                     import transaction
 from django.dispatch               import receiver
 from django.http                   import HttpResponse, HttpResponseRedirect, HttpResponsePermanentRedirect, HttpResponseServerError, HttpResponseForbidden
 from django.http                   import Http404
