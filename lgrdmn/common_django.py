@@ -89,14 +89,14 @@ def limit_offset_request(items, request):
 
     return limit_offset(items, limit=limit, offset=offset)
 
-def request_bool(REQUEST, name):
+def request_bool(REQUEST, name, missing=False, blank=True):
     if name not in REQUEST:
-        return False
-    value = REQUEST[name]
-    if value in (0, "0"):
-        return False
-    assert value in ("", 1, "1")
-    return True
+        return missing
+    return {
+        "": blank,
+        "1": True,
+        "0": False,
+    }[REQUEST[name]]
 
 def flatten_choices(choices):
     """ Returns choices without groups (if any). """
@@ -258,7 +258,12 @@ try:
 except:
     django_import = django.utils.module_loading.import_by_path
 
-JsonEncoder = django_import(settings.JSON_ENCODER) if hasattr(settings, "JSON_ENCODER") else DjangoJSONEncoder
+_JsonEncoder = None
+def get_json_encoder_class():
+    global _JsonEncoder
+    if _JsonEncoder is None:
+        _JsonEncoder = django_import(settings.JSON_ENCODER) if hasattr(settings, "JSON_ENCODER") else DjangoJSONEncoder
+    return _JsonEncoder
 
 def json_params(request):
     """ Gets and validates parameters for json_response by inspecting request. """
@@ -279,7 +284,7 @@ def json_response(data=None, raw=None, jsonp="", plaintext=False, content_type=N
     """ Returns HttpResponse("jsonp(json)"), sets Content-Type to application/json or text/plain depending on plaintext. """
     if request:
         return json_response(data, raw, status=status, **json_params(request))
-    json = raw if raw is not None else write_json(data, pretty=plaintext, encoder_class=JsonEncoder)
+    json = raw if raw is not None else write_json(data, pretty=plaintext, encoder_class=get_json_encoder_class())
     return HttpResponse("%s(%s)" % (jsonp, json) if jsonp and conf.json.regex_jsonp.match(jsonp) else json,
         content_type=(content_type or ("text/plain" if plaintext else "application/json")),
         status=status,
