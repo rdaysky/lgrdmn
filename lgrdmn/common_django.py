@@ -117,6 +117,20 @@ def url_patterns_without_spaces(prefix, *args): # would have used (?x) if that h
             return pattern
     return django.conf.urls.patterns(prefix, *[without_spaces(i) for i in args])
 
+def void():
+    return None
+
+class deconstructible_function:
+    def __init__(self, function):
+        self.function = function
+
+    def deconstruct(self):
+        return (void.__module__ + ".void", (), {})
+
+    def __call__(self, *a, **k):
+        return self.function(*a, **k)
+
+
 def get_qs(some_db_set):
     if isinstance(some_db_set, django.db.models.query.QuerySet):
         return some_db_set

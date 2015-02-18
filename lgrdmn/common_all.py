@@ -6,6 +6,7 @@ import json
 import re
 import six
 import types
+import csv
 
 def namespace(function):
     fields = function()
@@ -35,6 +36,39 @@ def force_unicode(s, encoding="UTF-8", errors="strict"): # taken from django.uti
         return six.text_type(s)
 
     return six.text_type(bytes(s), encoding, errors)
+
+def utf8(x):
+    if isinstance(x, unicode):
+        return x.encode("UTF-8")
+    return x
+
+def force_utf8(x):
+    if isinstance(x, str):
+        return x
+    return unicode(x).encode("UTF-8")
+
+def recursive_map(f, x):
+    if isinstance(x, list):
+        return [recursive_map(f, i) for i in x]
+    if isinstance(x, tuple):
+        return tuple(recursive_map(f, i) for i in x)
+    if isinstance(x, dict):
+        return { recursive_map(f, k): recursive_map(f, v) for k, v in x.items() }
+    return f(x)
+
+class csv_writer_utf8:
+    def __init__(self, *a, **k):
+        self.writer = csv.writer(*a, **k)
+
+    def writerow(self, row):
+        return self.writer.writerow(recursive_map(utf8, row))
+
+    def writerows(self, rows):
+        return self.writer.writerows(recursive_map(utf8, rows))
+
+    @property
+    def dialect(self):
+        return self.writer.dialect
 
 _re_whitespace = re.compile(r"\s+")
 def normalize_space(s):
