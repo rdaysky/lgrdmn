@@ -29,12 +29,12 @@ from email.MIMEText import MIMEText
 from email.MIMEImage import MIMEImage
 import email.utils
 
-import sys
-import os
+import inspect
 import itertools
-import uuid
-
 import json
+import os
+import sys
+import uuid
 
 from .common_all import *
 
@@ -117,27 +117,36 @@ def url_patterns_without_spaces(prefix, *args): # would have used (?x) if that h
             return pattern
     return django.conf.urls.patterns(prefix, *[without_spaces(i) for i in args])
 
-def void():
-    return None
+class Deconstructor(object):
+    def deconstruct(self):
+        return "{}.{}".format(self.__class__.__module__, self.__class__.__name__), (), {}
 
-class deconstructible_function:
+    def __eq__(self, anything):
+        return True
+
+class DeconstructibleFunction(Deconstructor):
     def __init__(self, function):
         self.function = function
-
-    def deconstruct(self):
-        return (void.__module__ + ".void", (), {})
 
     def __call__(self, *a, **k):
         return self.function(*a, **k)
 
+def deconstructible_function(function):
+    return DeconstructibleFunction(function)
 
 def get_qs(some_db_set):
-    if isinstance(some_db_set, django.db.models.query.QuerySet):
-        return some_db_set
-    elif isinstance(some_db_set, django.db.models.manager.Manager):
-        return some_db_set.all()
-    else:
-        return some_db_set._default_manager.all()
+    if isinstance(some_db_set, django.db.models.query.QuerySet):  return some_db_set
+    if isinstance(some_db_set, django.db.models.manager.Manager): return some_db_set.all()
+    if issubclass(some_db_set, django.db.models.Model):           return some_db_set._default_manager.all()
+
+    assert False, "get_qs: unexpected {}".format(some_db_set if inspect.isclass(some_db_set) else type(some_db_set))
+
+def get_manager(some_db_set):
+    if isinstance(some_db_set, django.db.models.query.QuerySet):  return some_db_set.model._default_manager
+    if isinstance(some_db_set, django.db.models.manager.Manager): return some_db_set
+    if issubclass(some_db_set, django.db.models.Model):           return some_db_set._default_manager
+
+    assert False, "get_qs: unexpected {}".format(some_db_set if inspect.isclass(some_db_set) else type(some_db_set))
 
 def get_object_or_none(__objects, *args, **kwargs):
     qs = get_qs(__objects)
@@ -145,6 +154,14 @@ def get_object_or_none(__objects, *args, **kwargs):
     try:
         return qs.get(*args, **kwargs)
     except qs.model.DoesNotExist:
+        return None
+
+def create_or_ignore(__objects, *args, **kwargs):
+    manager = get_manager(__objects)
+    try:
+        with transaction.atomic():
+            return manager.create(*args, **kwargs)
+    except django.db.IntegrityError:
         return None
 
 def create_or_replace(objects, key, data, condition=None):
