@@ -74,20 +74,37 @@ def objects_extra(Manager=django.db.models.Manager, QuerySet=django.db.models.qu
     else:
         return oe_inner(Mixin=Manager)
 
-@overload
-def limit_offset(items, limit, offset=0):
+def _limit_offset_int(items, limit=None, offset=0):
+    if limit is None:
+        return items
     assert limit >= 0 and offset >= 0
     return items[offset : limit + offset]
 
-@limit_offset.overload
-def limit_offset_request(items, request):
+def get_limit_offset(request=None, extra=0):
     if request is None or "limit" not in request.REQUEST:
-        return items
+        return None, 0
 
-    limit  = int(request.REQUEST["limit"])
+    limit  = int(request.REQUEST["limit"]) + extra
     offset = int(request.REQUEST.get("offset", 0))
 
-    return limit_offset(items, limit=limit, offset=offset)
+    return limit, offset
+
+def _limit_offset_request(items, request, extra=0):
+    return _limit_offset_int(items, *get_limit_offset(request, extra))
+
+def limit_offset(items, *a, **k):
+    if a:
+        assert not k
+        return _limit_offset_int(items, *a)
+
+    if k:
+        assert not a
+        if "limit" in k:
+            return _limit_offset_int(items, **k)
+        return _limit_offset_request(items, **k)
+
+    return items
+
 
 def request_bool(REQUEST, name, missing=False, blank=True):
     if name not in REQUEST:
@@ -156,30 +173,57 @@ def get_object_or_none(__objects, *args, **kwargs):
     except qs.model.DoesNotExist:
         return None
 
-def create_or_ignore(__objects, *args, **kwargs):
+def create_or_ignore(__objects, **kwargs):
     manager = get_manager(__objects)
     try:
         with transaction.atomic():
-            return manager.create(*args, **kwargs)
+            return manager.create(**kwargs)
     except django.db.IntegrityError:
         return None
 
-def create_or_replace(objects, key, data, condition=None):
+def lookup_from_key(key, model):
+    res = key.copy()
+    for f in model._meta.fields:
+        if f.attname in res:
+            res[f.name] = res.pop(f.attname)
+    return res
+
+def create_from_key(key):
+    return { k: v for k, v in key.items() if "__" not in k }
+
+def create_or_delete(objects, create, key, data={}, ignore=False, ignore_create=None, ignore_delete=None):
+    if create:
+        create_params = combine_dicts(
+            create_from_key(get_qs(objects).model, key),
+            data,
+        )
+
+        if coalesce(ignore_create, ignore):
+            return create_or_ignore(objects, **create_params) is not None
+        else:
+            get_manager(objects).create(**create_params)
+            return True
+    else:
+        qs = get_qs(objects)
+        c = qs.filter(**key).delete()
+        if c > 0:
+            return True
+        elif coalesce(ignore_delete, ignore):
+            return False
+        else:
+            raise qs.model.DoesNotExist()
+
+def create_or_replace(objects, key, data={}, condition=None):
     # https://code.djangoproject.com/attachment/ticket/3182/3182.update_or_create-only.3.diff
 
+    assert len(key) > 0
     qs = get_qs(objects)
-    assert key and data
-
-    lookup = key.copy()
-    for f in qs.model._meta.fields:
-        if f.attname in lookup:
-            lookup[f.name] = lookup.pop(f.attname)
 
     qs._for_write = True
 
-    with xact():
+    with transaction.atomic():
         try:
-            instance = qs.get(**lookup)
+            instance = qs.get(**lookup_from_key(key, model=qs.model))
 
             if condition:
                 if not condition(instance):
@@ -187,8 +231,7 @@ def create_or_replace(objects, key, data, condition=None):
 
             created = False
         except qs.model.DoesNotExist:
-            params = dict([(k, v) for k, v in key.items() if "__" not in k])
-            instance = qs.model(**params)
+            instance = qs.model(**create_from_key(key))
             created = True
 
         for attname, value in data.items():
