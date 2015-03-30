@@ -19,6 +19,7 @@ from django.views.decorators.csrf  import csrf_exempt
 import django.conf.urls
 import django.contrib.auth.models
 import django.db
+import django.db.models
 import django.db.models.manager
 import django.db.models.query
 import django.forms
@@ -57,6 +58,67 @@ class StrippingCharField(django.forms.CharField):
     def to_python(self, value):
         res = super(StrippingCharField, self).to_python(value)
         return res.strip() if isinstance(res, basestring) else res
+
+class CharFieldIgnoringChoices(django.forms.CharField):
+    def __init__(self, coerce=None, choices=None, *a, **k):
+        super(CharFieldIgnoringChoices, self).__init__(*a, **k)
+
+class EnumField(django.db.models.Field):
+    __metaclass__ = django.db.models.SubfieldBase
+
+    empty_strings_allowed = False
+    description = "Enum value"
+
+    def __init__(self, enum_class, display_attribute=None, *a, **k):
+        self.enum_class = enum_class
+        self.display_attribute = display_attribute
+
+        self.explicit_choices = bool(k.get("choices", None))
+        if not self.explicit_choices:
+            k["choices"] = [(x, getattr(x, display_attribute or "_name_")) for x in enum_class]
+
+        return super(EnumField, self).__init__(*a, **k)
+
+    def deconstruct(self):
+        name, path, args, kwargs = super(EnumField, self).deconstruct()
+        kwargs["enum_class"] = self.enum_class
+        if self.display_attribute:
+            kwargs["display_attribute"] = self.display_attribute
+        if not self.explicit_choices:
+            kwargs.pop("choices", None)
+        return name, path, args, kwargs
+
+    def get_internal_type(self):
+        return "IntegerField"
+
+    def to_python(self, value):
+        if value is None:
+            return None
+
+        if isinstance(value, basestring):
+            if value.isdigit():
+                return self.enum_class(int(value))
+
+            prefix, dot, name = value.rpartition(".")
+            if dot == ".":
+                assert prefix == self.enum_class.__name__
+            return self.enum_class[name]
+        return self.enum_class(value)
+
+    def get_prep_value(self, value):
+        value = super(EnumField, self).get_prep_value(value)
+        if value is None:
+            return None
+        if isinstance(value, int):
+            return value
+        return value._value_
+
+    def formfield(self, **kwargs):
+        return super(EnumField, self).formfield(**combine_dicts(
+            kwargs,
+            form_class=django.forms.CharField,
+            choices_form_class=CharFieldIgnoringChoices,
+        ))
 
 def objects_extra(Manager=django.db.models.Manager, QuerySet=django.db.models.query.QuerySet):
     def oe_inner(Mixin, Manager=django.db.models.Manager, QuerySet=django.db.models.query.QuerySet):
@@ -194,7 +256,7 @@ def create_from_key(key):
 def create_or_delete(objects, create, key, data={}, ignore=False, ignore_create=None, ignore_delete=None):
     if create:
         create_params = combine_dicts(
-            create_from_key(get_qs(objects).model, key),
+            create_from_key(key),
             data,
         )
 
