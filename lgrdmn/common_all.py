@@ -272,17 +272,11 @@ def coalesce(*args):
             return i
     return None
 
-JE_DEFAULT_DEFAULT = object()
 def json_encoder_class(base=object):
     def je_inner(function):
         class JsonEncoder(base):
             def default(self, o):
-                result = function(o)
-
-                if result is not JE_DEFAULT_DEFAULT:
-                    return result
-
-                return super(JsonEncoder, self).default(o)
+                return function(o, super(JsonEncoder, self).default)
         return JsonEncoder
     return je_inner
 
