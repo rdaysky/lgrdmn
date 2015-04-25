@@ -18,11 +18,13 @@ from django.views.decorators.csrf  import csrf_exempt
 
 import django.conf.urls
 import django.contrib.auth.models
+import django.contrib.staticfiles.finders
 import django.db
 import django.db.models
 import django.db.models.manager
 import django.db.models.query
 import django.forms
+import django.utils._os
 import django.utils.module_loading
 
 from email.MIMEMultipart import MIMEMultipart
@@ -119,6 +121,17 @@ class EnumField(django.db.models.Field):
             form_class=django.forms.CharField,
             choices_form_class=CharFieldIgnoringChoices,
         ))
+
+class ExistingStaticFilesFinder(django.contrib.staticfiles.finders.BaseFinder):
+    """ A static files finder for files already existing under STATIC_ROOT.  """
+    def find(self, path, all=False):
+        fs_path = django.utils._os.safe_join(settings.STATIC_ROOT, path)
+        if os.path.exists(fs_path):
+            return [fs_path] if all else fs_path
+        return [] # sic (even if all=False)
+
+    def list(self, ignore_patterns):
+        return []
 
 def objects_extra(Manager=django.db.models.Manager, QuerySet=django.db.models.query.QuerySet):
     def oe_inner(Mixin, Manager=django.db.models.Manager, QuerySet=django.db.models.query.QuerySet):
