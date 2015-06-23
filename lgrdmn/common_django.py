@@ -429,6 +429,13 @@ class JsonResponse(object):
     def __init__(self, struct):
         self.struct = struct
 
+def xar_response(url):
+    response = HttpResponse()
+    if "Content-Type" in response:
+        del response["Content-Type"]
+    response["X-Accel-Redirect"] = url
+    return response
+
 def fast_login(request, user, remember=False):
     if not hasattr(request, "session"):
         assert not remember

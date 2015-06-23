@@ -1,5 +1,7 @@
 # File encoding: UTF-8
 
+import functools
+import Image
 import inspect
 import itertools
 import json
@@ -7,6 +9,7 @@ import re
 import six
 import types
 import csv
+import socket, httplib, xmlrpclib
 
 def namespace(function):
     fields = function()
@@ -55,6 +58,26 @@ def recursive_map(f, x):
     if isinstance(x, dict):
         return { recursive_map(f, k): recursive_map(f, v) for k, v in x.items() }
     return f(x)
+
+def image_transpose_exif(im):
+    exif_orientation_tag = 0x0112 # contains an integer, 1 through 8
+    exif_transpose_sequences = [  # corresponding to the following
+        [],
+        [Image.FLIP_LEFT_RIGHT],
+        [Image.ROTATE_180],
+        [Image.FLIP_TOP_BOTTOM],
+        [Image.FLIP_LEFT_RIGHT, Image.ROTATE_90],
+        [Image.ROTATE_270],
+        [Image.FLIP_TOP_BOTTOM, Image.ROTATE_90],
+        [Image.ROTATE_90],
+    ]
+
+    try:
+        seq = exif_transpose_sequences[im._getexif()[exif_orientation_tag] - 1]
+    except:
+        return im
+    else:
+        return functools.reduce(lambda im, x: im.transpose(x), seq, im)
 
 class csv_writer_utf8:
     def __init__(self, *a, **k):
@@ -306,3 +329,16 @@ def key_for_host(keys, host):
         if k in keys:
             return keys[k]
     raise KeyError(host)
+
+class UnixStreamHTTPConnection(httplib.HTTPConnection):
+    def connect(self):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.connect(self.host)
+
+class XmlrpcUnixStreamTransport(xmlrpclib.Transport, object):
+    def __init__(self, socket_path):
+        self.socket_path = socket_path
+        super(XmlrpcUnixStreamTransport, self).__init__()
+
+    def make_connection(self, host):
+        return UnixStreamHTTPConnection(self.socket_path)
