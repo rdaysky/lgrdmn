@@ -50,6 +50,43 @@ def force_utf8(x):
         return x
     return unicode(x).encode("UTF-8")
 
+try:
+    import unidecode
+except ImportError:
+    pass
+else:
+    def dumb_down(s):
+        return unidecode.unidecode(s.strip().lower())
+
+try:
+    from lxml import etree
+    import lxml.html
+    from lxml.html import soupparser
+    from BeautifulSoup import UnicodeDammit
+except ImportError:
+    pass
+else:
+    def decode_html(html):
+        converted = UnicodeDammit(html, isHTML=True)
+        if not converted.unicode:
+            raise UnicodeDecodeError("Failed to detect encoding, tried [%s]", ', '.join(converted.triedEncodings))
+        return converted.unicode
+
+    def tree_from_html(html):
+        as_unicode = decode_html(html)
+        for parser in [soupparser, lxml.html]:
+            try:
+                return parser.fromstring(as_unicode)
+            except:
+                pass
+        raise ValueError("Unable to parse HTML")
+
+    def outer_html_by_xpath(html, xpath, strip_tags=None):
+        element = tree_from_html(html).xpath(xpath)[0]
+        if strip_tags:
+            etree.strip_tags(element, *strip_tags)
+        return etree.tostring(element, method="html", encoding=unicode)
+
 def recursive_map(f, x):
     if isinstance(x, list):
         return [recursive_map(f, i) for i in x]
@@ -58,6 +95,23 @@ def recursive_map(f, x):
     if isinstance(x, dict):
         return { recursive_map(f, k): recursive_map(f, v) for k, v in x.items() }
     return f(x)
+
+def groupby(objects, func):
+    return [(i, list(j)) for i, j in itertools.groupby(objects, func)]
+
+def uniq_c(objects):
+    it = iter(objects)
+    c = 1
+    last = next(it)
+    for i in it:
+        # so far, objects is known to end with [last] * c
+        if i == last:
+            c += 1
+        else:
+            yield c, last
+            c = 1
+        last = i
+    yield c, last
 
 def image_transpose_exif(im):
     exif_orientation_tag = 0x0112 # contains an integer, 1 through 8
@@ -96,9 +150,6 @@ class csv_writer_utf8:
 _re_whitespace = re.compile(r"\s+")
 def normalize_space(s):
     return re.sub(_re_whitespace, " ", s).strip()
-
-def groupby(objects, func):
-    return [(i, list(j)) for i, j in itertools.groupby(objects, func)]
 
 def argument_bindings(func, args, kwargs):
     # http://code.activestate.com/recipes/551779-introspecting-call-arguments/
