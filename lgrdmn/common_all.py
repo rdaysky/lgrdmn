@@ -1,7 +1,6 @@
 # File encoding: UTF-8
 
 import functools
-import Image
 import inspect
 import itertools
 import json
@@ -99,39 +98,47 @@ def recursive_map(f, x):
 def groupby(objects, func):
     return [(i, list(j)) for i, j in itertools.groupby(objects, func)]
 
-def uniq_c(objects):
+def uniq_c(objects, key=None, predicate=None):
     it = iter(objects)
     c = 1
     last = next(it)
+    klast = key(last) if key is not None else last
     for i in it:
         # so far, objects is known to end with [last] * c
-        if i == last:
+        ki = key(i) if key is not None else i
+        if predicate(ki, last) if predicate is not None else ki == klast:
             c += 1
         else:
             yield c, last
             c = 1
         last = i
+        klast = key(last) if key is not None else last
     yield c, last
 
-def image_transpose_exif(im):
-    exif_orientation_tag = 0x0112 # contains an integer, 1 through 8
-    exif_transpose_sequences = [  # corresponding to the following
-        [],
-        [Image.FLIP_LEFT_RIGHT],
-        [Image.ROTATE_180],
-        [Image.FLIP_TOP_BOTTOM],
-        [Image.FLIP_LEFT_RIGHT, Image.ROTATE_90],
-        [Image.ROTATE_270],
-        [Image.FLIP_TOP_BOTTOM, Image.ROTATE_90],
-        [Image.ROTATE_90],
-    ]
+try:
+    import Image
+except ImportError:
+    pass
+else:
+    def image_transpose_exif(im):
+        exif_orientation_tag = 0x0112 # contains an integer, 1 through 8
+        exif_transpose_sequences = [  # corresponding to the following
+            [],
+            [Image.FLIP_LEFT_RIGHT],
+            [Image.ROTATE_180],
+            [Image.FLIP_TOP_BOTTOM],
+            [Image.FLIP_LEFT_RIGHT, Image.ROTATE_90],
+            [Image.ROTATE_270],
+            [Image.FLIP_TOP_BOTTOM, Image.ROTATE_90],
+            [Image.ROTATE_90],
+        ]
 
-    try:
-        seq = exif_transpose_sequences[im._getexif()[exif_orientation_tag] - 1]
-    except:
-        return im
-    else:
-        return functools.reduce(lambda im, x: im.transpose(x), seq, im)
+        try:
+            seq = exif_transpose_sequences[im._getexif()[exif_orientation_tag] - 1]
+        except:
+            return im
+        else:
+            return functools.reduce(lambda im, x: im.transpose(x), seq, im)
 
 class csv_writer_utf8:
     def __init__(self, *a, **k):
