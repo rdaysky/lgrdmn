@@ -238,7 +238,7 @@ def get_manager(some_db_set):
     if isinstance(some_db_set, django.db.models.manager.Manager): return some_db_set
     if issubclass(some_db_set, django.db.models.Model):           return some_db_set._default_manager
 
-    assert False, "get_qs: unexpected {}".format(some_db_set if inspect.isclass(some_db_set) else type(some_db_set))
+    assert False, "get_manager: unexpected {}".format(some_db_set if inspect.isclass(some_db_set) else type(some_db_set))
 
 def get_object_or_none(__objects, *args, **kwargs):
     qs = get_qs(__objects)
