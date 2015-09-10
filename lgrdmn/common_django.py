@@ -3,12 +3,12 @@
 from django.conf import settings
 
 from django.contrib                import auth
-from django.core.exceptions        import ObjectDoesNotExist, ImproperlyConfigured, MiddlewareNotUsed
+from django.core.exceptions        import *
 from django.core.serializers.json  import DjangoJSONEncoder
 from django.core.urlresolvers      import reverse as django_reverse
 from django.db                     import transaction
 from django.dispatch               import receiver
-from django.http                   import HttpResponse, HttpResponseRedirect, HttpResponsePermanentRedirect, HttpResponseServerError, HttpResponseForbidden
+from django.http                   import HttpResponse, HttpResponsePermanentRedirect, HttpResponseRedirect, HttpResponseForbidden, HttpResponseNotFound, HttpResponseServerError
 from django.http                   import Http404
 from django.shortcuts              import get_object_or_404, render_to_response
 from django.template               import RequestContext
@@ -458,7 +458,7 @@ def set_auth_backend(user, backend=None):
 def authenticate_and_login(request, username, password, remember=False):
     user = auth.authenticate(username=username, password=password)
     if user is None:
-        raise AuthenticationRequired(error="wrong_credentials", username_hint=username)
+        return None
 
     fast_login(request, user, remember=remember)
 

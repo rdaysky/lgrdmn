@@ -8,10 +8,19 @@ from geopy.distance import distance as geopy_distance
 
 from .common_django import *
 
-def lat_lon(s):
-    if not s:
+def lat_lon(point):
+    if not point:
         return None
-    s_lat, s_lon = s.strip().split(",")
+
+    if isinstance(point, geos.Point):
+        lon, lat = point
+        return lat, lon
+
+    if isinstance(point, (tuple, list)):
+        lat, lon = point
+        return float(lat), float(lon)
+
+    s_lat, s_lon = point.strip().split(",")
     return float(s_lat), float(s_lon)
 
 def parse_point(s):

@@ -1,5 +1,7 @@
 __all__ = ["EnumExtra"]
 
+import itertools
+
 try:
     import enum
 except:
@@ -60,7 +62,9 @@ class EnumExtraMeta(enum.EnumMeta):
 def _eex_new(cls, *value_tuple):
     obj = object.__new__(cls)
     obj._value_ = value_tuple[0]
-    for en, ev in zip(cls._eex_names_, value_tuple[1:]):
+    if len(value_tuple) - 1 > len(cls._eex_names_):
+        raise TypeError("too many extra values")
+    for en, ev in itertools.izip_longest(cls._eex_names_, value_tuple[1:]):
         setattr(obj, en, ev)
     obj.value_tuple = value_tuple
     return obj
