@@ -338,17 +338,8 @@ def monkey_patch_replace_method(cls): # Decorator
 
     return mp_outer
 
-class _value_holder:
-    __slots__ = ("value",)
-
-    def __init__(self, value):
-        self.value = value
-
-class ignore_none(_value_holder):
-    pass
-
-class delete_none(_value_holder):
-    pass
+dict_ignore = object()
+dict_delete = object()
 
 def combine_dicts(*args, **kwargs):
     """ Updates {} with all dicts in *args and then updates with kwargs. """
@@ -356,14 +347,10 @@ def combine_dicts(*args, **kwargs):
     for i in args:
         m.update(i)
     for k, v in kwargs.items():
-        if isinstance(v, ignore_none):
-            if v.value is not None:
-                m[k] = v.value
-        elif isinstance(v, delete_none):
-            if v.value is not None:
-                m[k] = v.value
-            else:
-                m.pop(k, None)
+        if v is dict_delete:
+            m.pop(k, None)
+        elif v is dict_ignore:
+            pass
         else:
             m[k] = v
     return m
