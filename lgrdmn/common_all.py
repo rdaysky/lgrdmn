@@ -338,12 +338,34 @@ def monkey_patch_replace_method(cls): # Decorator
 
     return mp_outer
 
+class _value_holder:
+    __slots__ = ("value",)
+
+    def __init__(self, value):
+        self.value = value
+
+class ignore_none(_value_holder):
+    pass
+
+class delete_none(_value_holder):
+    pass
+
 def combine_dicts(*args, **kwargs):
     """ Updates {} with all dicts in *args and then updates with kwargs. """
     m = {}
     for i in args:
         m.update(i)
-    m.update(kwargs)
+    for k, v in kwargs.items():
+        if isinstance(v, ignore_none):
+            if v.value is not None:
+                m[k] = v.value
+        elif isinstance(v, delete_none):
+            if v.value is not None:
+                m[k] = v.value
+            else:
+                m.pop(k, None)
+        else:
+            m[k] = v
     return m
 
 def coalesce(*args):
