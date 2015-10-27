@@ -390,12 +390,15 @@ def superdomains(domain):
     for i in range(len(components)):
         yield ".".join(components[i:])
 
-def key_for_host(keys, host):
+_KFH_NO_DEFAULT = object()
+def key_for_host(keys, host, default=_KFH_NO_DEFAULT):
     """ Returns keys[f.q.d.n | *.f.q.d.n | *.q.d.n | *.d.n | *.n | *] """
     for k in [host] + ["*.%s" % d for d in superdomains(host)] + ["*"]:
         if k in keys:
             return keys[k]
-    raise KeyError(host)
+    if default is _KFH_NO_DEFAULT:
+        raise KeyError(host)
+    return default
 
 class UnixStreamHTTPConnection(httplib.HTTPConnection):
     def connect(self):

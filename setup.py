@@ -1,8 +1,8 @@
-from distutils.core import setup
+from setuptools import setup, find_packages
 
 setup(
     name = "lgrdmn",
-    packages = ["lgrdmn"],
+    packages = find_packages(),
     version = "0.1",
     description = "Needful things",
     author = "Roman Odaisky",

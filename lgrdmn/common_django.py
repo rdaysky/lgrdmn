@@ -32,14 +32,21 @@ from email.MIMEText import MIMEText
 from email.MIMEImage import MIMEImage
 import email.utils
 
+import importlib
 import inspect
 import itertools
 import json
+import logging
 import os
 import sys
 import uuid
 
 from .common_all import *
+
+try:
+    conf = importlib.import_module(settings.LGRDMN_CONF)
+except Exception:
+    conf = None
 
 try:
     import django.contrib.auth.hashers
@@ -469,3 +476,165 @@ def set_field_widget_attribute(form, field, name, value):
     if widget.attrs is None:
         widget.attrs = {}
     widget.attrs[name] = value
+
+def json_requested(request):
+    http_accept = request.META.get("HTTP_ACCEPT", "")
+    json_accepted, html_accepted = [(t in http_accept) for t in
+        ("application/json", "text/html")] # TODO: perhaps parse the field better
+
+    if conf.json.re_api_json_url.match(request.path):
+        return True
+
+    if json_accepted:
+        return True
+
+    if "json_output" in request.REQUEST:
+        return True
+
+    if html_accepted:
+        return False
+
+    #if request.is_ajax():
+    #    return True
+
+    return False
+
+def item_or_404(hash, subscript, message=None):
+    """ Returns hash[subscript], converting KeyError to Http404. """
+    try:
+        return hash[subscript]
+    except KeyError:
+        raise Http404(coalesce(message, "No item corresponds to given subscript."))
+
+_GAI_NO_DEFAULT = object()
+def get_any_item(items, *names, **kwargs):
+    default = kwargs.pop("default", _GAI_NO_DEFAULT)
+    assert not kwargs
+
+    for name in names:
+        if name in items:
+            return items[name]
+
+    if default is not _GAI_NO_DEFAULT:
+        return default
+
+    raise KeyError()
+
+class AuthenticationRequired(Exception):
+    """ Stores the reason of the error and what to show on the page. """
+    def __init__(self, error=None, username_hint=None):
+        self.error = error
+        self.username_hint = username_hint
+
+    def __str__(self):
+        return self.error
+
+class InvalidForm(Exception):
+    """ Stores information about failed form validation. """
+    def __init__(self, form):
+        self.form = form
+
+    def __str__(self):
+        try:
+            return u"; ".join([u"* %s: %s" % (k, u"; ".join([force_unicode(i) for i in v])) for k, v in self.form.errors.items()])
+        except:
+            return "[Some errors]"
+
+class InvalidSubmission(Exception):
+    """ Stores information about a submission failure that’s not related to a field. """
+    def __init__(self, error_key):
+        self.error_key = error_key
+
+class ApiError(Exception):
+    def __init__(self, reason, data={}):
+        self.reason = reason
+        self.data = data
+
+def enforce_valid(form):
+    """ Requres is_valid(). Can raise InvalidForm. """
+    if not form.is_valid():
+        raise InvalidForm(form)
+    return form
+
+def attempted_post(request):
+    return request.POST if hasattr(request, "_failed_form") else None
+
+def form_errors(request):
+    """ Returns request._failed_form.errors | request._failed_form | None. """
+    if not hasattr(request, "_failed_form"):
+        return {}
+
+    ff = request._failed_form
+
+    return getattr(ff, "errors", ff)
+
+post_by_action = {}
+def post_handler(action, next=None, stay=False, atomic=True, validate_session=False): # Decorator
+    """ Registers a handler for a given POST action, validates session, issues a redirect. """
+    def ph_outer(view):
+        def ph_inner(request):
+            if request.method != "POST":
+                raise Http404("Only POST can be used for this kind of query") # TODO: HTTP 405?
+
+            if validate_session:
+                if request.POST.get(conf.session_validation_token_post_name, None) != hash_secret(request.COOKIES[settings.SESSION_COOKIE_NAME]):
+                    raise Http404("CSRF") # TODO: hax0rz
+
+            wrapped_view = transaction.atomic(view) if atomic else view
+
+            result = wrapped_view(request)
+            if isinstance(result, HttpResponse):
+                return result
+
+            if stay or conf.submit_stay in request.POST:
+                result = None
+            elif next:
+                result = next(request) or result
+            return result or request.path # TODO: HttpResponseRedirect here and not in post_middleware?
+
+        assert action not in post_by_action
+        post_by_action[action] = ph_inner
+        return ph_inner
+    return ph_outer
+
+def access_restricted(_view=None, require_active=True, require_staff=False): # Decorator
+    """ Requires that user be authenticated. """
+    def ar_outer(_view):
+        def ar_inner(request, *args, **kwargs):
+            if request.user is None or not request.user.is_authenticated():
+                raise AuthenticationRequired()
+
+            if require_active and not request.user.is_active:
+                raise AuthenticationRequired("user_inactive")
+
+            if require_staff and not request.user.is_staff:
+                raise AuthenticationRequired("lacks_permission")
+
+            return _view(request, *args, **kwargs)
+        return ar_inner
+
+    if _view:
+        return ar_outer(_view)
+    return ar_outer
+
+def admin_autoregister_module(module_name):
+    import inspect
+    import django.contrib.admin.sites
+
+    try:
+        ModelAdmin = sys.modules["django.contrib.gis.admin"].OSMGeoAdmin
+    except Exception:
+        ModelAdmin = None
+
+    module_dict = sys.modules[module_name].__dict__
+    for name, model in module_dict.items():
+        if inspect.isclass(model) and model.__module__ == module_name and issubclass(model, models.Model) and not model._meta.abstract:
+            try:
+                admin.site.unregister(model)
+            except django.contrib.admin.sites.NotRegistered:
+                pass
+
+            try:
+                admin.site.register(model, module_dict.get("%sAdmin" % name, ModelAdmin))
+            except django.contrib.admin.sites.AlreadyRegistered:
+                pass
