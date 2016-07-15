@@ -46,7 +46,10 @@ from .common_all import *
 try:
     conf = importlib.import_module(settings.LGRDMN_CONF)
 except Exception:
-    conf = None
+    try:
+        conf = importlib.import_module(settings.INSTALLED_APPS[-1] + ".conf")
+    except Exception:
+        conf = None
 
 try:
     import django.contrib.auth.hashers
@@ -215,6 +218,35 @@ def url_patterns_without_spaces(prefix, *args): # would have used (?x) if that h
         else:
             return pattern
     return django.conf.urls.patterns(prefix, *[without_spaces(i) for i in args])
+
+_uidbwhatever = None
+def uidb36or64():
+    global _uidbwhatever
+    if _uidbwhatever is not None:
+        return _uidbwhatever
+
+    import django.http
+    import django.contrib.auth.views
+
+    def is_bad_argument(name):
+        try:
+            django.contrib.auth.views.password_reset_confirm(django.http.HttpRequest(), **{name: None})
+        except TypeError, e:
+            if "got an unexpected keyword argument" in e.message:
+                return True
+            return False
+        except:
+            return False
+        else:
+            return False
+
+    is_uidb36_bad = is_bad_argument("uidb36")
+    is_uidb64_bad = is_bad_argument("uidb64")
+
+    assert is_uidb36_bad != is_uidb64_bad
+
+    _uidbwhatever = "uidb36" if is_uidb64_bad else "uidb64"
+    return _uidbwhatever
 
 class Deconstructor(object):
     def deconstruct(self):
@@ -556,6 +588,31 @@ def enforce_valid(form):
         raise InvalidForm(form)
     return form
 
+def enforce_update(values, instance, fields=None, exclude=None, files={}):
+    from django.db.models.fields.files import FileField
+    unaffected_field_names = { f.name for f in instance._meta.fields }
+    for f in instance._meta.fields:
+        if fields is not None and f.name not in fields:
+            continue
+        if exclude is not None and f.name in exclude:
+            continue
+
+        data = files if isinstance(f, FileField) else values
+
+        if f.name not in data:
+            continue
+
+        setattr(instance, f.attname, data[f.name])
+        unaffected_field_names.remove(f.name)
+
+    try:
+        instance.full_clean(exclude=unaffected_field_names, validate_unique=False)
+    except ValidationError as e:
+        class FakeForm:
+            errors = e.message_dict
+        raise InvalidForm(FakeForm())
+    return instance
+
 def attempted_post(request):
     return request.POST if hasattr(request, "_failed_form") else None
 
@@ -619,6 +676,7 @@ def access_restricted(_view=None, require_active=True, require_staff=False): # D
 
 def admin_autoregister_module(module_name):
     import inspect
+    import django.db.models
     import django.contrib.admin.sites
 
     try:
@@ -628,13 +686,13 @@ def admin_autoregister_module(module_name):
 
     module_dict = sys.modules[module_name].__dict__
     for name, model in module_dict.items():
-        if inspect.isclass(model) and model.__module__ == module_name and issubclass(model, models.Model) and not model._meta.abstract:
+        if inspect.isclass(model) and model.__module__ == module_name and issubclass(model, django.db.models.Model) and not model._meta.abstract:
             try:
-                admin.site.unregister(model)
+                django.contrib.admin.site.unregister(model)
             except django.contrib.admin.sites.NotRegistered:
                 pass
 
             try:
-                admin.site.register(model, module_dict.get("%sAdmin" % name, ModelAdmin))
+                django.contrib.admin.site.register(model, module_dict.get("%sAdmin" % name, ModelAdmin))
             except django.contrib.admin.sites.AlreadyRegistered:
                 pass

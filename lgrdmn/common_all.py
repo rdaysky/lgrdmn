@@ -362,7 +362,7 @@ def coalesce(*args):
             return i
     return None
 
-def json_encoder_class(base=object):
+def json_encoder_class(base=json.JSONEncoder):
     def je_inner(function):
         class JsonEncoder(base):
             def default(self, o):
