@@ -8,7 +8,6 @@ import re
 import six
 import types
 import csv
-import socket, httplib, xmlrpclib
 
 def namespace(function):
     fields = function()
@@ -400,15 +399,20 @@ def key_for_host(keys, host, default=_KFH_NO_DEFAULT):
         raise KeyError(host)
     return default
 
-class UnixStreamHTTPConnection(httplib.HTTPConnection):
-    def connect(self):
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.connect(self.host)
+try:
+    import socket, httplib, xmlrpclib
+except ImportError:
+    pass
+else:
+    class UnixStreamHTTPConnection(httplib.HTTPConnection):
+        def connect(self):
+            self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.sock.connect(self.host)
 
-class XmlrpcUnixStreamTransport(xmlrpclib.Transport, object):
-    def __init__(self, socket_path):
-        self.socket_path = socket_path
-        super(XmlrpcUnixStreamTransport, self).__init__()
+    class XmlrpcUnixStreamTransport(xmlrpclib.Transport, object):
+        def __init__(self, socket_path):
+            self.socket_path = socket_path
+            super(XmlrpcUnixStreamTransport, self).__init__()
 
-    def make_connection(self, host):
-        return UnixStreamHTTPConnection(self.socket_path)
+        def make_connection(self, host):
+            return UnixStreamHTTPConnection(self.socket_path)
