@@ -231,7 +231,7 @@ def uidb36or64():
     def is_bad_argument(name):
         try:
             django.contrib.auth.views.password_reset_confirm(django.http.HttpRequest(), **{name: None})
-        except TypeError, e:
+        except TypeError as e:
             if "got an unexpected keyword argument" in e.message:
                 return True
             return False

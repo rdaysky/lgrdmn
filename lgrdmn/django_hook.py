@@ -254,7 +254,7 @@ class AuthMiddleware(object):
                 u = authenticate_and_login(request, username, password)
                 if u is None:
                     raise AuthenticationRequired(error="wrong_credentials", username_hint=username)
-            except AuthenticationRequired, e:
+            except AuthenticationRequired as e:
                 return response_authentication_required(request, e)
             else:
                 request.csrf_processing_done = True

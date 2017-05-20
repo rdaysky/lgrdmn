@@ -75,7 +75,7 @@ else:
         for parser in [soupparser, lxml.html]:
             try:
                 return parser.fromstring(as_unicode)
-            except:
+            except Exception:
                 pass
         raise ValueError("Unable to parse HTML")
 
@@ -134,7 +134,7 @@ else:
 
         try:
             seq = exif_transpose_sequences[im._getexif()[exif_orientation_tag] - 1]
-        except:
+        except Exception:
             return im
         else:
             return functools.reduce(lambda im, x: im.transpose(x), seq, im)
